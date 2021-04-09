@@ -55,7 +55,7 @@ def postprocess_output(original_tensor: torch.Tensor,
 
    # Convert the image from LAB-space to RGB and return it.
    output = lab2rgb(output.data.cpu().numpy()[0, ...].transpose((1, 2, 0))) * 255
-   return output
+   return output.astype(np.uint8)
 
 @register_processor(name = 'cic_colorizer_image')
 def cic_colorizer_image_processor(input_image: np.ndarray, model: nn.Module,
