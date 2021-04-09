@@ -33,8 +33,8 @@ done this, enter the top-level directory and execute the following:
 make build
 ```
  
-The provided Makefile will configure the models directory as well as the `mediavision.weights` module
-for easy usage.
+The provided Makefile will configure the `models` directory as well as the `mediavision.weights` module
+for easy usage, in addition to installing all system requirements.
 
 ## Core Features
 

@@ -1,0 +1,11 @@
+numpy
+torch
+torchvision
+fastai
+scikit-image
+scikit-video
+opencv-python-headless
+matplotlib
+seaborn
+tqdm
+

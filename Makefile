@@ -5,6 +5,7 @@
 # the weights JSON file and unzips the downloaded files.
 .PHONY: build
 build:
+	@pip install -r requirements.txt
 	@if cd scripts; then python3 build_models.py; \
    	else \
    	  echo "\033[91mCould not enter the \`scripts\` directory. Check your Makefile path.\033[0m"; \
