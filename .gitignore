@@ -1,0 +1,31 @@
+# Python environment and bytecoode files.
+venv/
+__pycache__/
+
+# Local machine (PyCharm/MacOS) files,
+.idea/
+.DS_Store
+
+# Testing files.
+**test*.*
+
+# All video and audio files.
+*.mp4
+*.mkv
+videos/
+
+# Any unnecessary directories.
+data/
+images/
+mediavision/models/*
+ignore/
+
+# Specific testing files.
+/recolor-image.py
+/recolor-video.py
+/interpolate.py
+/utils.py
+
+# Files that should be kept.
+!mediavision/models/README.md
+
