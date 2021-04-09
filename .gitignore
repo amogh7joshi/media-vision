@@ -19,6 +19,7 @@ data/
 images/
 mediavision/models/*
 ignore/
+animations/
 
 # Specific testing files.
 /recolor-image.py
