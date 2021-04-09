@@ -2,7 +2,8 @@
 
 A toolbox for reconstructing visual media, primarily images and videos, through operations including
 colorizing, upscaling, interpolating, and more. This project makes use of entirely open-source papers and 
-code implementations, which are re-implemented, and the neural networks have pre-trained weights loaded in.
+code implementations, which are re-implemented, and the neural networks have pre-trained weights loaded in 
+(the toolbox is implemented almost exclusively in PyTorch).
 
 **Note**: While the goal of MediaVision is to try to reconstruct media, all features that are added to images
 or video, such as artificial coloring or frame interpolation (adding artificial frames), is not necessarily 
@@ -119,6 +120,18 @@ either some form of matplotlib or OpenCV backend.
           Wen and Shi, Boxin and Zhou, Shuchang},
   journal={arXiv preprint arXiv:2011.06294},
   year={2020}
+}
+```
+
+### Media Resolution Upscaling
+
+```bibtex
+@InProceedings{wang2018esrgan,
+    author = {Wang, Xintao and Yu, Ke and Wu, Shixiang and Gu, Jinjin and Liu, Yihao and Dong, Chao and Qiao, Yu and Loy, Chen Change},
+    title = {ESRGAN: Enhanced super-resolution generative adversarial networks},
+    booktitle = {The European Conference on Computer Vision Workshops (ECCVW)},
+    month = {September},
+    year = {2018}
 }
 ```
 
