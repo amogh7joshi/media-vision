@@ -4,6 +4,7 @@ import os
 import time
 import _thread
 import warnings
+import subprocess
 from queue import Queue
 from functools import partial
 from typing import Tuple, Any, List
@@ -83,6 +84,163 @@ def pad_image(image: torch.Tensor, padding: tuple, fp16: bool = False) -> torch.
       return F.pad(image, padding).half()
    return F.pad(image, padding)
 
+@register_processor(name = 'rife_interpolator_image')
+def rife_interpolator_image_processor(images: np.ndarray,
+                                      output_path: AnyPath,
+                                      model: MediaVisionModelBase,
+                                      exp: int = 4, ratio: int = 0,
+                                      ratio_threshold: float = 0.02,
+                                      max_cycles: int = 8, dst_fps: int = 30,
+                                      construct_video: bool = True):
+   """Process and interpolate an image through a rife model."""
+   # Ignore the parameter warnings from PyTorch.
+   warnings.filterwarnings("ignore")
+
+   # Initialize the console for output logging.
+   console = Console(header = "[FRAME INTERPOLATION]")
+
+   # Configure the device.
+   device = ('cuda' if torch.cuda.is_available() else 'cpu')
+
+   # Extract the images from the paths.
+   image_0, image_1 = images
+
+   # Ensure the two images have the same shape.
+   if image_0.shape != image_1.shape:
+      raise ValueError(
+         f"Image shapes are not the same, got {image_0.shape} and {image_1.shape}")
+
+   # Convert the images to tensors.
+   image_0 = torch.tensor(image_0.transpose(2, 0, 1) / 255.0) \
+                  .to(device).unsqueeze(0)
+   image_1 = torch.tensor(image_1.transpose(2, 0, 1) / 255.0) \
+                  .to(device).unsqueeze(0)
+
+   # Construct the padding arguments for the images.
+   n, c, h, w = image_0.shape
+   pad_h = ((h - 1) // 32 + 1) * 32
+   pad_w = ((w - 1) // 32 + 1) * 32
+   padding = (0, pad_w - w, 0, pad_h - h)
+
+   # Pad the images.
+   image_0 = F.pad(image_0, padding)
+   image_1 = F.pad(image_1, padding)
+
+   # Create a list of interpolated images.
+   interpolated_images = [image_0]
+
+   # Interpolate the images.
+   if ratio != 0: # For the case in which an inference ratio is provided.
+      # Construct the ratios for each image.
+      image_0_ratio, image_1_ratio = 0.0, 1.0
+
+      # Create the different cases for finding intermediate images.
+      if ratio <= image_0_ratio + ratio_threshold / 2:
+         # The `middle` image is simply the first image.
+         middle = image_0_ratio
+      elif ratio >= image_1_ratio - ratio_threshold / 2:
+         # The `middle` image is simply the second image.
+         middle = image_1_ratio
+      else: # Otherwise, actually construct intermediate frames.
+         # Create placeholders for the images.
+         temp_image_0 = image_0
+         temp_image_1 = image_1
+
+         # Create a progress bar to track each cycle.
+         p_bar = tqdm(total = max_cycles,
+                      desc = console.header + "Constructing intermediate frames",
+                      bar_format = "%s{l_bar}{bar}{r_bar}%s" % ('\033[94m', '\033[0m'))
+
+         # Iterate over each intermediate frame to be made.
+         for cycle in range(max_cycles):
+            # Get the predicted frame.
+            middle = model.inference(temp_image_0.float(), temp_image_1.float()) # noqa
+            m_ratio = (image_0_ratio + image_1_ratio) / 2
+
+            # Determine whether to continue or make a new frame.
+            if ratio - (ratio_threshold / 2) <= m_ratio \
+                  <= ratio + (ratio_threshold / 2):
+               break
+            if ratio > m_ratio:
+               temp_image_0 = middle
+               image_0_ratio = m_ratio
+            else:
+               temp_image_1 = middle
+               image_1_ratio = m_ratio
+
+            # Update the progress bar.
+            p_bar.update(1)
+
+         # Close the progress bar.
+         p_bar.close()
+
+      # Add the images to the list.
+      interpolated_images.extend(middle, image_1) # noqa
+   else: # Otherwise, add multiple sets of frames.
+      # Create a progress bar to track each cycle.
+      p_bar = tqdm(total = exp,
+                   desc = console.header + "Constructing intermediate frames",
+                   bar_format = "%s{l_bar}{bar}{r_bar}%s" % ('\033[94m', '\033[0m'))
+
+      # Add the last image to the list.
+      interpolated_images.append(image_1)
+
+      # Iterate over the provided parameter.
+      for i in range(exp):
+         # Create a temporary list.
+         temp_list = []
+
+         # Iterate over the images in the list.
+         for j in range(len(interpolated_images) - 1):
+            # Inference the middle image.
+            middle = model.inference( # noqa
+               interpolated_images[j].float(), interpolated_images[j + 1].float())
+
+            # Add the images to the list.
+            temp_list.append(interpolated_images[j])
+            temp_list.append(middle)
+
+         # Add the final image to the list.
+         temp_list.append(image_1)
+
+         # Reset the interpolated image list.
+         interpolated_images = temp_list
+
+         # Update the progress bar.
+         p_bar.update(1)
+
+      # Close the progress bar.
+      p_bar.close()
+
+   # Create the output directory.
+   if '.' not in output_path: # Create the output image directory.
+      os.makedirs(output_path) if not os.path.exists(output_path) else None
+   else: # Create the directory for the video.
+      os.makedirs(os.path.dirname(output_path)) \
+         if not os.path.exists(os.path.dirname(output_path)) else None
+
+   # Get the base ID of the input.
+   base = "interpolated"
+
+   # Create a directory with saved images.
+   for img in range(len(interpolated_images)):
+      cv2.imwrite(os.path.join(output_path, f'{base}_{img}.png'),
+                  (interpolated_images[img][0] * 255)
+                  .byte().cpu().numpy().transpose(1, 2, 0)[:h, :w])
+
+   # If asked to create a video, construct the GIF.
+   if construct_video:
+      # Remove the existing video.
+      os.remove(os.path.join(output_path, 'interpolated_video.gif')) \
+         if os.path.exists(os.path.join(output_path, 'interpolated_video.gif')) else None
+
+      # Execute the construction command.
+      os.system(" ".join((
+         'ffmpeg', '-r', '10', '-f', 'image2', '-i',
+         f'{output_path}/interpolated_%d.png', '-s', f'{w}x{h}', '-vf',
+         '"split[s0][s1];[s0]palettegen=stats_mode=single[p];[s1][p]paletteuse=new=1"',
+         f'{output_path}/interpolated_video.gif', '-hide_banner', '-loglevel error')))
+
 @register_processor(name = 'rife_interpolator_video')
 def rife_interpolator_video_processor(video_path: AnyPath, output_path: AnyPath = None,
                                       model: MediaVisionModelBase = None,
@@ -91,7 +249,7 @@ def rife_interpolator_video_processor(video_path: AnyPath, output_path: AnyPath 
                                       out_ext: str = None, png: bool = False,
                                       out_png_path: str = None, UHD: bool = True,
                                       montage: bool = False):
-   """Processor, colorize, and interpolate a video through a rife model."""
+   """Process and interpolate a video through a rife model."""
    # Ignore the parameter warnings from PyTorch.
    warnings.filterwarnings("ignore")
 
