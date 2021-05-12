@@ -22,7 +22,7 @@ def colorize_text(inp: str, color: str) -> str:
    return "".join(
       [_MEDIAVISION_COLORS[color], inp, _MEDIAVISION_COLORS['end']])
 
-def print_info(inp: str, color: str = None) -> None:
+def print_info(inp: str, color: str = None) -> str:
    """Handles the printing of information in a colored format.
 
    This method can take in inputs in two formats: a single
@@ -72,4 +72,43 @@ def print_info(inp: str, color: str = None) -> None:
 
    # Write the output string to the standard output.
    sys.stdout.write(output_string)
+
+   # Return the printed content if needed.
+   return output_string
+
+class Console(object):
+   """A wrapper class around the `print_info` method.
+
+   While the `print_info` method should technically be used
+   more often, this method will allow the appending of a certain
+   `header` to the input, which is useful for individual modules.
+
+   For example, for the interpolation module, this can be used as:
+
+   >>> console = Console("[INTERPOLATING VIDEO]")
+   >>> console.print("some information string")
+
+   The class will automatically add the ": " to the header.
+   """
+   def __init__(self, header = None):
+      # Set the header to the class.
+      self._header = header + ": "
+
+      # Create a tracker for printed statements.
+      self.stmts = []
+
+   @property
+   def header(self):
+      # Expose the header as a modifiable property.
+      return self._header
+
+   @header.setter
+   def header(self, value):
+      # Allow the adjustment of the header.
+      self._header = value + ": "
+
+   def print(self, content, color = None):
+      """Prints out the content using `print_info`."""
+      colored_content = print_info(content)
+      self.stmts.append(colored_content)
 
