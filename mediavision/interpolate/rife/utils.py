@@ -19,6 +19,7 @@ import torch.nn.functional as F
 
 from mediavision.core.types import AnyPath
 from mediavision.core.base import MediaVisionModelBase
+from mediavision.core.console import Console
 from mediavision.core.processing_registry import register_processor
 from mediavision.interpolate.rife.ssim import ssim_matlab
 from mediavision.interpolate.rife.audio import transfer_audio
@@ -159,28 +160,25 @@ def rife_interpolator_video_processor(video_path: AnyPath, output_path: AnyPath 
    if out_ext is None:
       out_ext = video_path_ext
 
-   # Create parameters for color output logging.
-   LOG_HEAD = "[FRAME INTERPOLATION]: "
-   BLUE_C = "\033[94m"
-   RED_C = "\033[91m"
-   GREEN_C = "\033[92m"
-   END_C = "\033[0m"
+   # Initialize the console for output logging.
+   console = Console(header = "[FRAME INTERPOLATION]")
 
    # Print out information about the video.
-   print(BLUE_C + LOG_HEAD + "{}{} - {} frames in total, interpolating from {:.3f} FPS to {:.3f} FPS.".format(
-      os.path.basename(video_path_base), out_ext, n_frames, video_fps, dst_fps) + END_C)
+   console.print(
+      "{}{} - {} frames in total, interpolating from {:.3f} FPS to {:.3f} FPS.".format(
+         os.path.basename(video_path_base), out_ext, n_frames, video_fps, dst_fps), color = "blue")
 
    # Print out information about audio merging.
    if not has_audio(video_path):
       # If the video has no audio to begin with, then there is nothing to merge.
-      print(BLUE_C + LOG_HEAD + "The video has no audio, no audio will be transferred." + END_C)
+      console.print("The video has no audio, no audio will be transferred.", color = "blue")
       has_no_audio = True
    else:
       has_no_audio = False
       if png is False and fps_not_assigned is True and not skip:
-         print(BLUE_C + LOG_HEAD + "The audio will be merged after the frame interpolation process." + END_C)
+         console.print("The audio will be merged after the frame interpolation process.", color = "blue")
       else:
-         print(RED_C + LOG_HEAD + "Cannot merge audio, you are using the png, FPS, or skip flags." + END_C)
+         console.print("Cannot merge audio, you are using the png, FPS, or skip flags.", color = "red")
 
    # Create the output video path.
    if output_path is not None:
@@ -196,11 +194,11 @@ def rife_interpolator_video_processor(video_path: AnyPath, output_path: AnyPath 
          video_path_base, (2 ** exp), int(np.round(dst_fps)), out_ext)
 
    # Print information about the output path.
-   print(BLUE_C + LOG_HEAD + f"Writing interpolated video to {output_path}." + END_C)
+   console.print(f"Writing interpolated video to {output_path}.", color = "blue")
 
    # If the output path already exists, remove it first.
    if os.path.exists(output_path):
-      print(BLUE_C + LOG_HEAD + f"Removing and overwriting existing file at {output_path}." + END_C)
+      console.print(f"Removing and overwriting existing file at {output_path}.", color = "blue")
       os.remove(output_path)
 
    # Construct the video writer.
@@ -253,8 +251,8 @@ def rife_interpolator_video_processor(video_path: AnyPath, output_path: AnyPath 
 
    # Create the progressbar.
    pbar = tqdm(total = int(n_frames),
-               desc = LOG_HEAD + "Interpolating Video",
-               bar_format = "%s{l_bar}{bar}{r_bar}%s" % (BLUE_C, END_C))
+               desc = console.header + "Interpolating Video",
+               bar_format = "%s{l_bar}{bar}{r_bar}%s" % ('\033[94m', '\033[0m'))
 
    # Start iterating in reverse over the video.
    while True:
@@ -280,17 +278,18 @@ def rife_interpolator_video_processor(video_path: AnyPath, output_path: AnyPath 
       # Process the SSIM map and images.
       # There is a special case if the user wants to skip static frames, so determine
       # if the similarity between the frames makes them essentially static.
-      if ssim > 0.995 and skip:
+      if ssim > 0.995 and skip: # noqa
          # Warn the user if the skipped frames are altering the video.
          if skip_frame % 100 == 0:
-            print(RED_C + LOG_HEAD + "\nWarning: Your video has {} static frames, skipping them"
-                                     "may alter the duration of the original video.".format(skip_frame))
+            console.print(
+               "\nWarning: Your video has {} static frames, skipping them"
+               "may alter the duration of the original video.".format(skip_frame), color = "red")
          skip_frame += 1
          pbar.update(1)
          continue
 
       # Evaluate the SSIM map and construct a set of frames.
-      if ssim < 0.5:
+      if ssim < 0.5: # noqa
          # Create the parameters.
          output = []
          step = 1 / (2 ** exp)
@@ -302,7 +301,7 @@ def rife_interpolator_video_processor(video_path: AnyPath, output_path: AnyPath 
             output.append(torch.from_numpy(
                np.transpose((cv2.addWeighted(
                   frame[:, :, ::-1], alpha, last_frame[:, :, ::-1], beta, 0)[:, :, ::-1].copy()),
-                            (2,0,1))).to(device, non_blocking = True).unsqueeze(0).float() / 255.)
+                            (2, 0, 1))).to(device, non_blocking = True).unsqueeze(0).float() / 255.)
       else:
          # Otherwise, just get the regular model inference.
          output = static_inference(image0, image1, exp)
@@ -347,7 +346,7 @@ def rife_interpolator_video_processor(video_path: AnyPath, output_path: AnyPath 
                   "Audio transfer failed. Output video will have no audio." + "\033[0m")
 
    # Print the final set of information.
-   print(GREEN_C + LOG_HEAD + "Video interpolation complete." + END_C)
+   console.print("Video interpolation complete.", color = "green")
 
    # Re-enable warnings.
    warnings.resetwarnings()
